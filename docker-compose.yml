@@ -1,32 +1,51 @@
 services:
-  postgres:
+  db:
     image: postgres:13
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: db
+      POSTGRES_PASSWORD: postgres_password
+    volumes:
+      - lamp_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lamp_network
 
   product_service:
-    build: ./product_service
+    build:
+      context: .
+      dockerfile: Dockerfile.product
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres_password@db:5432/postgres
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-    environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/db
+      db:
+        condition: service_healthy
+    networks:
+      - lamp_network
 
   order_service:
-    build: ./order_service
-    ports:
-      - "8001:8001"
-    depends_on:
-      - postgres
+    build:
+      context: .
+      dockerfile: Dockerfile.order
     environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/db
+      - DATABASE_URL=postgresql://postgres:postgres_password@db:5432/postgres
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - lamp_network
+
+networks:
+  lamp_network:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  lamp_data:
